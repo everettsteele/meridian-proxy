@@ -149,26 +149,74 @@ app.post('/api/forge', async (req, res) => {
     return res.status(400).json({ error: 'Provide an idea (at least 3 characters).' });
   }
 
-  const prompt = `You are an expert landing page designer and copywriter. Generate a complete, beautiful, production-quality HTML landing page for the following idea:
+  const prompt = `You are an expert product designer and copywriter. Generate a complete, stunning, production-quality HTML landing page for the following product idea:
 
 "${idea.trim()}"
 
-Requirements:
-- Complete self-contained HTML file with all CSS inline in a <style> tag
-- No external dependencies except Google Fonts (allowed)
-- Hero section with a strong headline and subheadline
-- Features or benefits section (3 items)
-- App screenshots section: two phone frame mockups side by side, built entirely in HTML/CSS (no images). Each phone frame should show a dummy but believable app screen interior relevant to the product idea — use colored blocks, fake text lines, simple UI elements like buttons and nav bars, all styled to feel like a real app. The phone frames should be styled with rounded corners, a notch or status bar at top, and a realistic aspect ratio. This section should have a heading like "See it in action" or similar.
-- Social proof or credibility element (testimonial, stat, or trust badge)
-- Clear call-to-action section
-- Footer
-- Mobile-responsive
-- Visually striking design — choose a strong aesthetic direction (not generic bootstrap blue)
-- Real-feeling copy — specific, not placeholder text
-- No JavaScript required for the layout
-- The phone mockup section must use only CSS and HTML — no SVG images, no external assets, no canvas
+The page must feel like a real funded startup's marketing site — specific copy, strong visual hierarchy, and genuine product thinking. Not generic. Not placeholder.
 
-Return ONLY the complete HTML. No explanation, no markdown fences, no commentary. Start with <!DOCTYPE html> and end with </html>.`;
+REQUIRED SECTIONS IN ORDER:
+
+1. NAV BAR
+   - Logo (product name) on left
+   - 2-3 nav links on right
+   - CTA button (e.g. "Get Early Access" or "Try Free")
+
+2. HERO SECTION
+   - Bold, specific headline (not generic — make it about the core pain point)
+   - Subheadline expanding on the value prop (2 sentences max)
+   - Primary CTA button + secondary link
+   - Below the hero text: a LARGE product showcase section showing the app
+     This showcase must be built entirely in HTML/CSS — no images, no SVG files, no canvas, no JS for rendering.
+     Layout: one large desktop/tablet browser frame mockup in the center, with 2 mobile phone frames flanking it on each side (or arranged tastefully around it).
+     DESKTOP FRAME: a browser chrome (address bar, tab, traffic lights) containing a realistic app interface for this product. Use colored blocks, nav bars, sidebars, data rows, charts (CSS only), cards, and realistic fake content specific to the product idea.
+     MOBILE FRAMES (2): phone frames with notch/status bar showing different screens of the app — e.g. a dashboard view and a detail/action view. Make the UI feel like the real app, using colors and layout specific to the product.
+     Use the brand colors from the landing page design for the app UI internals.
+     All frames should have subtle shadows and look polished.
+
+3. SOCIAL PROOF BAR
+   - 3-4 company logos (fake but plausible, CSS text-based) or a stat strip (e.g. "10,000+ teams", "99.9% uptime", "$2.4M saved")
+
+4. FEATURES SECTION
+   - Strong section heading
+   - 3 feature cards with icon (CSS shape or unicode), title, and 2-sentence description
+   - Make features specific to the product idea — no generic "save time" filler
+
+5. HOW IT WORKS
+   - 3 numbered steps, each with a short title and description
+   - Specific to the product workflow
+
+6. TESTIMONIALS
+   - 2-3 testimonials with fake but realistic name, title, company
+   - Specific to the product's value prop
+
+7. PRICING (optional but encouraged if relevant)
+   - 2-3 tiers with names, prices, and 3-4 bullet features each
+   - Highlight the middle/popular tier
+
+8. FINAL CTA SECTION
+   - Strong closing headline
+   - CTA button
+
+9. FOOTER
+   - Logo, tagline, 3-4 nav links, copyright
+
+DESIGN REQUIREMENTS:
+- Complete self-contained HTML file, all CSS in a <style> tag
+- No external dependencies except Google Fonts (one pairing allowed)
+- Choose a strong, specific aesthetic direction based on the product category:
+  * B2B SaaS: clean, professional, lots of white space, blue/slate tones
+  * Consumer app: bold, colorful, playful, big typography
+  * Finance/legal: authoritative, dark navy or deep green, serif accents
+  * Health/wellness: warm, organic, soft gradients
+  * Developer tool: dark mode, monospace accents, technical feel
+  * Never use generic bootstrap blue or default purple gradient
+- Mobile responsive
+- Real, specific copy throughout — use the product idea to generate believable product names, feature names, user personas, and value props
+- The app mockup frames are the hero visual — invest the most effort here
+- All mockup frames must use ONLY CSS and HTML (no SVG images, no external assets, no canvas, no JS for rendering)
+
+Return ONLY the complete HTML. No explanation, no markdown fences. Start with <!DOCTYPE html> and end with </html>.`;
 
   try {
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
@@ -180,7 +228,7 @@ Return ONLY the complete HTML. No explanation, no markdown fences, no commentary
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        max_tokens: 6000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
