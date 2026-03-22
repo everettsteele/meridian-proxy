@@ -15,6 +15,10 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.post('/api/chat', async (req, res) => {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: 'API key not configured on server' });
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+  if (!checkChatRateLimit(ip)) {
+    return res.status(429).json({ error: 'Rate limit reached. Try again later.' });
+  }
   try {
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -49,11 +53,31 @@ function checkForgeRateLimit(ip) {
   return true;
 }
 
+// IP rate limiting for chat endpoint — 20 requests per IP per hour
+const chatRateLimit = new Map();
+function checkChatRateLimit(ip) {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const max = 20;
+  const record = chatRateLimit.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) {
+    record.count = 0;
+    record.resetAt = now + windowMs;
+  }
+  if (record.count >= max) return false;
+  record.count++;
+  chatRateLimit.set(ip, record);
+  return true;
+}
+
 // Clean up stale rate limit entries every hour
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of forgeRateLimit.entries()) {
     if (now > record.resetAt) forgeRateLimit.delete(ip);
+  }
+  for (const [ip, record] of chatRateLimit.entries()) {
+    if (now > record.resetAt) chatRateLimit.delete(ip);
   }
 }, 60 * 60 * 1000);
 
