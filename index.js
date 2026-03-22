@@ -158,6 +158,7 @@ Requirements:
 - No external dependencies except Google Fonts (allowed)
 - Hero section with a strong headline and subheadline
 - Features or benefits section (3 items)
+- App screenshots section: two phone frame mockups side by side, built entirely in HTML/CSS (no images). Each phone frame should show a dummy but believable app screen interior relevant to the product idea — use colored blocks, fake text lines, simple UI elements like buttons and nav bars, all styled to feel like a real app. The phone frames should be styled with rounded corners, a notch or status bar at top, and a realistic aspect ratio. This section should have a heading like "See it in action" or similar.
 - Social proof or credibility element (testimonial, stat, or trust badge)
 - Clear call-to-action section
 - Footer
@@ -165,6 +166,7 @@ Requirements:
 - Visually striking design — choose a strong aesthetic direction (not generic bootstrap blue)
 - Real-feeling copy — specific, not placeholder text
 - No JavaScript required for the layout
+- The phone mockup section must use only CSS and HTML — no SVG images, no external assets, no canvas
 
 Return ONLY the complete HTML. No explanation, no markdown fences, no commentary. Start with <!DOCTYPE html> and end with </html>.`;
 
