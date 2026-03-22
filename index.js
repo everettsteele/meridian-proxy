@@ -57,6 +57,58 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
+// Verify Cloudflare Turnstile token
+async function verifyTurnstile(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return { success: false, error: 'Turnstile not configured' };
+  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ secret, response: token, remoteip: ip })
+  });
+  return res.json();
+}
+
+app.post('/api/forge/gate', async (req, res) => {
+  const { email, turnstileToken } = req.body;
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email required.' });
+  }
+  if (!turnstileToken) {
+    return res.status(400).json({ error: 'CAPTCHA token required.' });
+  }
+
+  // Verify CAPTCHA
+  const turnstileResult = await verifyTurnstile(turnstileToken, ip);
+  if (!turnstileResult.success) {
+    return res.status(403).json({ error: 'CAPTCHA verification failed. Please try again.' });
+  }
+
+  // Log email via Resend
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendKey}` },
+        body: JSON.stringify({
+          from: 'Forge Demo <forge@getrebuilt.app>',
+          to: 'everett@neverstill.llc',
+          subject: `Forge Demo: New visitor — ${email}`,
+          html: `<p>New Forge demo visitor:</p><p><strong>${email}</strong></p><p>IP: ${ip}</p><p>Time: ${new Date().toISOString()}</p>`
+        })
+      });
+    } catch (e) {
+      // Log failure but don't block the user
+      console.error('Resend error:', e.message);
+    }
+  }
+
+  res.json({ success: true });
+});
+
 app.post('/api/forge', async (req, res) => {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: 'API key not configured' });
@@ -66,7 +118,7 @@ app.post('/api/forge', async (req, res) => {
     return res.status(429).json({ error: 'Rate limit reached. You can generate 3 previews per hour.' });
   }
 
-  const { idea } = req.body;
+  const { idea, email } = req.body;
   if (!idea || typeof idea !== 'string' || idea.trim().length < 3) {
     return res.status(400).json({ error: 'Provide an idea (at least 3 characters).' });
   }
