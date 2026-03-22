@@ -82,8 +82,10 @@ app.post('/api/forge/gate', async (req, res) => {
 
   // Verify CAPTCHA
   const turnstileResult = await verifyTurnstile(turnstileToken, ip);
+  console.log('Turnstile result:', JSON.stringify(turnstileResult));
   if (!turnstileResult.success) {
-    return res.status(403).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    const reason = turnstileResult.error || turnstileResult['error-codes']?.join(', ') || 'unknown';
+    return res.status(403).json({ error: `CAPTCHA verification failed: ${reason}` });
   }
 
   // Log email via Resend
