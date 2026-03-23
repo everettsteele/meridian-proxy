@@ -248,7 +248,7 @@ Return ONLY valid JSON with these fields:
   const classifyResponse = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, messages: [{ role: 'user', content: classifyPrompt }] })
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: classifyPrompt }] })
   });
   const classifyData = await classifyResponse.json();
   if (!classifyResponse.ok) return res.status(classifyResponse.status).json({ error: classifyData.error?.message || 'Classification failed' });
@@ -318,7 +318,7 @@ Return ONLY the complete HTML. No explanation. Start with <!DOCTYPE html>, end w
   const generateResponse = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 7000, messages: [{ role: 'user', content: generatePrompt }] })
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 7000, messages: [{ role: 'user', content: generatePrompt }] })
   });
   const generateData = await generateResponse.json();
   if (!generateResponse.ok) return res.status(generateResponse.status).json({ error: generateData.error?.message || 'Generation failed' });
