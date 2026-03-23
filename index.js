@@ -2,8 +2,17 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
+const allowedOrigins = [
+  'https://sorted.neverstill.llc',
+  'https://main.sorted-iu4.pages.dev'
+];
+const originPattern = /\.sorted-iu4\.pages\.dev$/;
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.includes(origin) || originPattern.test(new URL(origin).hostname))) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
   res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
