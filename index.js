@@ -29,6 +29,13 @@ app.post('/api/chat', async (req, res) => {
     return res.status(429).json({ error: 'Rate limit reached. Try again later.' });
   }
   try {
+    console.log('[sorted-api] incoming body:', JSON.stringify(req.body));
+    const anthropicPayload = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: req.body.max_tokens || 1024,
+      messages: req.body.messages
+    };
+    console.log('[sorted-api] sending to Anthropic:', JSON.stringify(anthropicPayload));
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -36,15 +43,14 @@ app.post('/api/chat', async (req, res) => {
         'x-api-key': key,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: req.body.max_tokens || 1024,
-        messages: req.body.messages
-      })
+      body: JSON.stringify(anthropicPayload)
     });
     const data = await upstream.json();
+    console.log('[sorted-api] Anthropic response status:', upstream.status);
+    console.log('[sorted-api] Anthropic response body:', JSON.stringify(data).slice(0, 500));
     res.status(upstream.status).json(data);
   } catch (err) {
+    console.error('[sorted-api] error:', err.message, err.stack);
     res.status(500).json({ error: err.message });
   }
 });
