@@ -4,15 +4,15 @@ const { putPlan, getPlan } = require('./kvStore');
 
 const router = express.Router();
 const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://sorted.neverstill.llc';
 
 function newId() {
   // 13-char base32-ish: 10 random bytes, base64url, lowercased, alphanumeric-only, first 13 chars
   return crypto.randomBytes(10).toString('base64url').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 13);
 }
 
-function publicUrl(req, id) {
-  const origin = req.headers.origin || 'https://sorted.neverstill.llc';
-  return `${origin}/?p=${id}`;
+function publicUrl(id) {
+  return `${PUBLIC_BASE_URL}/?p=${id}`;
 }
 
 function stripPhones(plan) {
@@ -39,7 +39,7 @@ router.post('/', async (req, res) => {
     locked: false, finalDate: null, finalReason: null, finalPlan: null
   };
   await putPlan(id, plan, TTL_SECONDS);
-  res.json({ id, url: publicUrl(req, id) });
+  res.json({ id, url: publicUrl(id) });
 });
 
 router.get('/:id', async (req, res) => {
