@@ -27,7 +27,6 @@ router.post('/', async (req, res) => {
   if (!Array.isArray(crew) || crew.length === 0) return res.status(400).json({ error: 'crew required' });
   for (const p of crew) {
     if (!p.name || !p.name.trim()) return res.status(400).json({ error: 'every crew row needs a name' });
-    if (!p.phone || !p.phone.trim()) return res.status(400).json({ error: 'every crew row needs a phone' });
   }
   if (!activity || !activity.name) return res.status(400).json({ error: 'activity required' });
   if (!organizerAvailability || !organizerAvailability.trim()) return res.status(400).json({ error: 'organizerAvailability required' });
@@ -37,7 +36,7 @@ router.post('/', async (req, res) => {
   const now = Date.now();
   const plan = {
     id, createdAt: now, crewName: crewName || '',
-    crew: crew.map(p => ({ name: p.name.trim(), phone: p.phone.trim() })),
+    crew: crew.map(p => ({ name: p.name.trim(), phone: (p.phone || '').trim() })),
     city: city || '', driveDistance: driveDistance || null, vibe: vibe || null, activity,
     knownPlan: !!knownPlan,
     votes: [{ name: crew[0].name.trim(), availability: organizerAvailability.trim(), at: now }],

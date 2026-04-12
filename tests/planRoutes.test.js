@@ -60,21 +60,23 @@ test('POST /api/plan creates a plan, seeds organizer vote, returns id + url', as
   } finally { server.close(); }
 });
 
-test('POST /api/plan rejects missing phone on a crew row', async () => {
+test('POST /api/plan accepts crew rows without phones (phones are optional)', async () => {
   store.clear();
   const { server, port } = await startApp();
   try {
     const r = await request(port, 'POST', '/api/plan', {
       crewName: 'x',
-      crew: [{ name: 'Mark', phone: '' }],
+      crew: [{ name: 'Mark', phone: '' }, { name: 'Dave' }],
       city: 'Atlanta',
       driveDistance: 2,
       vibe: { adventure: 3, risk: 2, cost: 2 },
       activity: { name: 'x' },
       organizerAvailability: 'any time'
     });
-    assert.equal(r.status, 400);
-    assert.match(r.body.error, /phone/i);
+    assert.equal(r.status, 200);
+    const stored = store.get(r.body.id);
+    assert.equal(stored.crew[0].phone, '');
+    assert.equal(stored.crew[1].phone, '');
   } finally { server.close(); }
 });
 
