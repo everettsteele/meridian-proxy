@@ -23,21 +23,23 @@ function stripPhones(plan) {
 }
 
 router.post('/', async (req, res) => {
-  const { crewName, crew, city, driveDistance, vibe, activity, organizerAvailability } = req.body || {};
+  const { crewName, crew, city, driveDistance, vibe, activity, organizerAvailability, knownPlan } = req.body || {};
   if (!Array.isArray(crew) || crew.length === 0) return res.status(400).json({ error: 'crew required' });
   for (const p of crew) {
     if (!p.name || !p.name.trim()) return res.status(400).json({ error: 'every crew row needs a name' });
     if (!p.phone || !p.phone.trim()) return res.status(400).json({ error: 'every crew row needs a phone' });
   }
-  if (!city || !activity || !vibe) return res.status(400).json({ error: 'city, activity, vibe required' });
+  if (!activity || !activity.name) return res.status(400).json({ error: 'activity required' });
   if (!organizerAvailability || !organizerAvailability.trim()) return res.status(400).json({ error: 'organizerAvailability required' });
+  if (!knownPlan && (!city || !vibe)) return res.status(400).json({ error: 'city and vibe required for discovery flow' });
 
   const id = newId();
   const now = Date.now();
   const plan = {
     id, createdAt: now, crewName: crewName || '',
     crew: crew.map(p => ({ name: p.name.trim(), phone: p.phone.trim() })),
-    city, driveDistance, vibe, activity,
+    city: city || '', driveDistance: driveDistance || null, vibe: vibe || null, activity,
+    knownPlan: !!knownPlan,
     votes: [{ name: crew[0].name.trim(), availability: organizerAvailability.trim(), at: now }],
     locked: false, finalDate: null, finalReason: null, finalPlan: null
   };
@@ -93,9 +95,13 @@ router.post('/:id/lock', async (req, res) => {
       await putPlan(plan.id, plan, TTL_SECONDS);
     }
 
-    // Step B: plan build
-    const planRaw = await callClaude(buildPlanPrompt(plan, plan.finalDate), 2000);
-    plan.finalPlan = parsePlanResponse(planRaw);
+    // Step B: plan build (skipped for known-plan flow — organizer supplied the plan)
+    if (plan.knownPlan) {
+      plan.finalPlan = [];
+    } else {
+      const planRaw = await callClaude(buildPlanPrompt(plan, plan.finalDate), 2000);
+      plan.finalPlan = parsePlanResponse(planRaw);
+    }
     plan.locked = true;
     await putPlan(plan.id, plan, TTL_SECONDS);
 
