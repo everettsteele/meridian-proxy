@@ -2,8 +2,6 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-app.use('/api/plan', require('./planRoutes'));
-
 const allowedOrigins = [
   'https://sorted.neverstill.llc',
   'https://main.sorted-iu4.pages.dev'
@@ -20,6 +18,8 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+app.use('/api/plan', require('./planRoutes'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
