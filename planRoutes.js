@@ -10,16 +10,25 @@ const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://sorted.neverstill.llc';
 
 function newId() {
-  // 13-char base32-ish: 10 random bytes, base64url, lowercased, alphanumeric-only, first 13 chars
   return crypto.randomBytes(10).toString('base64url').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 13);
+}
+
+function newToken() {
+  return crypto.randomBytes(16).toString('base64url').replace(/[^a-zA-Z0-9]/g, '').slice(0, 22);
 }
 
 function publicUrl(id) {
   return `${PUBLIC_BASE_URL}/?p=${id}`;
 }
 
-function stripPhones(plan) {
-  return { ...plan, crew: plan.crew.map(({ name }) => ({ name })) };
+function organizerUrl(id, token) {
+  return `${PUBLIC_BASE_URL}/?p=${id}&t=${token}`;
+}
+
+function publicView(plan, isOrganizer) {
+  // Strip phones + the organizer token from every public response.
+  const { organizerToken, ...rest } = plan;
+  return { ...rest, crew: plan.crew.map(({ name }) => ({ name })), isOrganizer: !!isOrganizer };
 }
 
 router.post('/', async (req, res) => {
@@ -33,6 +42,7 @@ router.post('/', async (req, res) => {
   if (!knownPlan && (!city || !vibe)) return res.status(400).json({ error: 'city and vibe required for discovery flow' });
 
   const id = newId();
+  const organizerToken = newToken();
   const now = Date.now();
   const plan = {
     id, createdAt: now, crewName: crewName || '',
@@ -40,16 +50,18 @@ router.post('/', async (req, res) => {
     city: city || '', driveDistance: driveDistance || null, vibe: vibe || null, activity,
     knownPlan: !!knownPlan,
     votes: [{ name: crew[0].name.trim(), availability: organizerAvailability.trim(), at: now }],
-    locked: false, finalDate: null, finalReason: null, finalPlan: null
+    locked: false, finalDate: null, finalReason: null, finalPlan: null,
+    organizerToken
   };
   await putPlan(id, plan, TTL_SECONDS);
-  res.json({ id, url: publicUrl(id) });
+  res.json({ id, url: publicUrl(id), organizerUrl: organizerUrl(id, organizerToken), organizerToken });
 });
 
 router.get('/:id', async (req, res) => {
   const plan = await getPlan(req.params.id);
   if (!plan) return res.status(404).json({ error: 'plan not found' });
-  res.json(stripPhones(plan));
+  const isOrganizer = !!(req.query.t && plan.organizerToken && req.query.t === plan.organizerToken);
+  res.json(publicView(plan, isOrganizer));
 });
 
 router.post('/:id/vote', async (req, res) => {
@@ -76,6 +88,9 @@ router.post('/:id/vote', async (req, res) => {
 router.post('/:id/lock', async (req, res) => {
   const plan = await getPlan(req.params.id);
   if (!plan) return res.status(404).json({ error: 'plan not found' });
+  if (plan.organizerToken && req.query.t !== plan.organizerToken) {
+    return res.status(403).json({ error: 'organizer token required' });
+  }
   if (plan.locked && plan.finalPlan) return res.status(409).json({ error: 'plan already locked' });
 
   try {
