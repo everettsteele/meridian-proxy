@@ -2,6 +2,8 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
+app.use('/api/plan', require('./planRoutes'));
+
 const allowedOrigins = [
   'https://sorted.neverstill.llc',
   'https://main.sorted-iu4.pages.dev'
@@ -13,7 +15,7 @@ app.use((req, res, next) => {
   if (origin && (allowedOrigins.includes(origin) || originPattern.test(new URL(origin).hostname))) {
     res.header('Access-Control-Allow-Origin', origin);
   }
-  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -351,6 +353,10 @@ Return ONLY the complete HTML. No explanation. Start with <!DOCTYPE html>, end w
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_KV_NAMESPACE_ID', 'CLOUDFLARE_API_TOKEN'].forEach(k => {
+  if (!process.env[k]) console.warn(`[sorted-api] warning: ${k} is not set — /api/plan will fail`);
 });
 
 const PORT = process.env.PORT || 3003;
