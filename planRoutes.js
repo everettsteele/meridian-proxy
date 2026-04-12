@@ -1,6 +1,9 @@
 const express = require('express');
 const crypto = require('node:crypto');
 const { putPlan, getPlan } = require('./kvStore');
+const { callClaude } = require('./claudeClient');
+const { buildConsensusPrompt, parseConsensusResponse } = require('./consensus');
+const { buildPlanPrompt, parsePlanResponse } = require('./planBuilder');
 
 const router = express.Router();
 const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
@@ -67,6 +70,40 @@ router.post('/:id/vote', async (req, res) => {
 
   await putPlan(plan.id, plan, TTL_SECONDS);
   res.json({ ok: true });
+});
+
+router.post('/:id/lock', async (req, res) => {
+  const plan = await getPlan(req.params.id);
+  if (!plan) return res.status(404).json({ error: 'plan not found' });
+  if (plan.locked && plan.finalPlan) return res.status(409).json({ error: 'plan already locked' });
+
+  try {
+    // Step A: consensus (skip if we already have finalDate from a prior partial run)
+    if (!plan.finalDate) {
+      const todayISO = new Date().toISOString().slice(0, 10);
+      let consensusRaw;
+      try {
+        consensusRaw = await callClaude(buildConsensusPrompt(plan, todayISO), 400);
+      } catch (e) {
+        consensusRaw = await callClaude(buildConsensusPrompt(plan, todayISO), 400); // one retry
+      }
+      const { date, reasoning } = parseConsensusResponse(consensusRaw);
+      plan.finalDate = date;
+      plan.finalReason = reasoning;
+      await putPlan(plan.id, plan, TTL_SECONDS);
+    }
+
+    // Step B: plan build
+    const planRaw = await callClaude(buildPlanPrompt(plan, plan.finalDate), 2000);
+    plan.finalPlan = parsePlanResponse(planRaw);
+    plan.locked = true;
+    await putPlan(plan.id, plan, TTL_SECONDS);
+
+    res.json({ ok: true, finalDate: plan.finalDate, finalReason: plan.finalReason, finalPlan: plan.finalPlan });
+  } catch (err) {
+    console.error('[planRoutes] lock failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

@@ -175,3 +175,103 @@ test('POST /api/plan/:id/vote returns 409 when plan is locked', async () => {
     assert.equal(r.status, 409);
   } finally { server.close(); }
 });
+
+test('POST /api/plan/:id/lock runs consensus then plan-build, writes finalDate/finalReason/finalPlan, sets locked', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }, { name: 'Dave', phone: '+2' }],
+    crewName: 'x', city: 'Atlanta', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'Skeet', blurb: 'bang' },
+    votes: [
+      { name: 'Mark', availability: 'any Saturday after 1pm', at: 1 },
+      { name: 'Dave', availability: 'not 4/25, otherwise weekends', at: 2 }
+    ],
+    locked: false, finalDate: null, finalReason: null, finalPlan: null
+  });
+
+  // Stub the Claude callers that planRoutes imports
+  require.cache[require.resolve('../claudeClient')] = {
+    exports: {
+      callClaude: async (prompt) => {
+        if (prompt.includes('Crew availability')) {
+          return '{"date":"2026-04-18","reasoning":"Only Saturday everyone can make."}';
+        }
+        return '[{"name":"Mark","driveTime":"20 min","bring":"eye pro","notes":"meet 1pm"},{"name":"Dave","driveTime":"35 min","bring":"cash","notes":"drive north"}]';
+      }
+    }
+  };
+
+  // planRoutes is already required above; re-require is not easy with node:test. Reset the cache and re-require here.
+  delete require.cache[require.resolve('../planRoutes')];
+  const routes = require('../planRoutes');
+  const app = express(); app.use(express.json()); app.use('/api/plan', routes);
+  const server = await new Promise(r => { const s = app.listen(0, () => r(s)); });
+  const port = server.address().port;
+
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/lock');
+    assert.equal(r.status, 200);
+    const stored = store.get('abc');
+    assert.equal(stored.finalDate, '2026-04-18');
+    assert.match(stored.finalReason, /Saturday/);
+    assert.equal(stored.finalPlan.length, 2);
+    assert.equal(stored.locked, true);
+  } finally { server.close(); }
+});
+
+test('POST /api/plan/:id/lock retries plan-build only if already locked but finalPlan is null', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }],
+    crewName: 'x', city: 'Atlanta', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'Skeet', blurb: 'bang' },
+    votes: [{ name: 'Mark', availability: 'Sat', at: 1 }],
+    locked: true, finalDate: '2026-04-18', finalReason: 'already picked', finalPlan: null
+  });
+
+  let consensusCalled = false;
+  require.cache[require.resolve('../claudeClient')] = {
+    exports: {
+      callClaude: async (prompt) => {
+        if (prompt.includes('Crew availability')) { consensusCalled = true; return '{"date":"X","reasoning":"x"}'; }
+        return '[{"name":"Mark","driveTime":"10 min","bring":"x","notes":"x"}]';
+      }
+    }
+  };
+
+  delete require.cache[require.resolve('../planRoutes')];
+  const routes = require('../planRoutes');
+  const app = express(); app.use(express.json()); app.use('/api/plan', routes);
+  const server = await new Promise(r => { const s = app.listen(0, () => r(s)); });
+  const port = server.address().port;
+
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/lock');
+    assert.equal(r.status, 200);
+    assert.equal(consensusCalled, false);
+    const stored = store.get('abc');
+    assert.equal(stored.finalDate, '2026-04-18'); // unchanged
+    assert.equal(stored.finalPlan.length, 1);     // filled in
+  } finally { server.close(); }
+});
+
+test('POST /api/plan/:id/lock returns 409 when fully locked (finalPlan present)', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }],
+    crewName: 'x', city: 'x', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'x' }, votes: [{ name: 'Mark', availability: 'x', at: 1 }],
+    locked: true, finalDate: '2026-04-18', finalReason: 'x', finalPlan: [{ name: 'Mark' }]
+  });
+
+  delete require.cache[require.resolve('../planRoutes')];
+  const routes = require('../planRoutes');
+  const app = express(); app.use(express.json()); app.use('/api/plan', routes);
+  const server = await new Promise(r => { const s = app.listen(0, () => r(s)); });
+  const port = server.address().port;
+
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/lock');
+    assert.equal(r.status, 409);
+  } finally { server.close(); }
+});
