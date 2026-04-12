@@ -31,6 +31,34 @@ function publicView(plan, isOrganizer) {
   return { ...rest, crew: plan.crew.map(({ name }) => ({ name })), isOrganizer: !!isOrganizer };
 }
 
+async function refineKnownPlan(rawText, crewSize) {
+  const prompt = `The organizer of a guys' day out wrote this rough plan: "${rawText}"
+
+Crew size: ${crewSize}
+
+Turn it into a concrete plan. Pick a specific, real venue (use the location they hinted at if any). Give reasonable timing, cost, and gear guidance. Fill in missing pieces with sensible defaults.
+
+Return ONLY a JSON object (no prose, no fences) with these keys:
+{
+  "name": "short punchy activity + venue, e.g. 'Skeet at Big Red Oak Sporting Clays'",
+  "venueType": "category like 'sporting clays range'",
+  "description": "2-3 sentences about what they'll actually do, what's cool about this venue",
+  "city": "the city/area this happens in",
+  "meetTime": "e.g. '1:00 PM'",
+  "duration": "e.g. '2-3 hours'",
+  "estimatedCost": "e.g. '$60-80/person'",
+  "whatToBring": ["item", "item", "item"],
+  "parkingNotes": "one short logistics note"
+}`;
+  const raw = await callClaude(prompt, 600);
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  let obj;
+  try { obj = JSON.parse(cleaned); }
+  catch { throw new Error('refine: invalid JSON'); }
+  if (!obj.name) throw new Error('refine: missing name');
+  return obj;
+}
+
 router.post('/', async (req, res) => {
   const { crewName, crew, city, driveDistance, vibe, activity, organizerAvailability, knownPlan } = req.body || {};
   if (!Array.isArray(crew) || crew.length === 0) return res.status(400).json({ error: 'crew required' });
@@ -41,14 +69,41 @@ router.post('/', async (req, res) => {
   if (!organizerAvailability || !organizerAvailability.trim()) return res.status(400).json({ error: 'organizerAvailability required' });
   if (!knownPlan && (!city || !vibe)) return res.status(400).json({ error: 'city and vibe required for discovery flow' });
 
+  let finalActivity = activity;
+  let finalCity = city || '';
+  const originalPlanText = knownPlan ? activity.name : '';
+
+  if (knownPlan) {
+    try {
+      const refined = await refineKnownPlan(activity.name, crew.length);
+      finalActivity = {
+        name: refined.name,
+        venueType: refined.venueType || '',
+        description: refined.description || '',
+        blurb: refined.description || '',
+        whatToBring: refined.whatToBring || [],
+        meetTime: refined.meetTime || '',
+        duration: refined.duration || '',
+        estimatedCost: refined.estimatedCost || '',
+        parkingNotes: refined.parkingNotes || ''
+      };
+      finalCity = refined.city || '';
+    } catch (err) {
+      console.error('[planRoutes] refine failed:', err.message);
+      return res.status(500).json({ error: 'could not refine plan: ' + err.message });
+    }
+  }
+
   const id = newId();
   const organizerToken = newToken();
   const now = Date.now();
   const plan = {
     id, createdAt: now, crewName: crewName || '',
     crew: crew.map(p => ({ name: p.name.trim(), phone: (p.phone || '').trim() })),
-    city: city || '', driveDistance: driveDistance || null, vibe: vibe || null, activity,
-    knownPlan: !!knownPlan,
+    city: finalCity, driveDistance: driveDistance || 3,
+    vibe: vibe || { adventure: 3, risk: 2, cost: 2 },
+    activity: finalActivity,
+    knownPlan: !!knownPlan, originalPlanText,
     votes: [{ name: crew[0].name.trim(), availability: organizerAvailability.trim(), at: now }],
     locked: false, finalDate: null, finalReason: null, finalPlan: null,
     organizerToken
@@ -109,13 +164,9 @@ router.post('/:id/lock', async (req, res) => {
       await putPlan(plan.id, plan, TTL_SECONDS);
     }
 
-    // Step B: plan build (skipped for known-plan flow — organizer supplied the plan)
-    if (plan.knownPlan) {
-      plan.finalPlan = [];
-    } else {
-      const planRaw = await callClaude(buildPlanPrompt(plan, plan.finalDate), 2000);
-      plan.finalPlan = parsePlanResponse(planRaw);
-    }
+    // Step B: plan build — runs for both flows now that known plans get a refined activity
+    const planRaw = await callClaude(buildPlanPrompt(plan, plan.finalDate), 2000);
+    plan.finalPlan = parsePlanResponse(planRaw);
     plan.locked = true;
     await putPlan(plan.id, plan, TTL_SECONDS);
 
