@@ -49,7 +49,8 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/:id/vote', async (req, res) => {
-  const { name, availability } = req.body || {};
+  const name = (req.body?.name || '').trim();
+  const availability = (req.body?.availability || '').trim();
   if (!name || !availability) return res.status(400).json({ error: 'name and availability required' });
 
   const plan = await getPlan(req.params.id);
@@ -60,11 +61,11 @@ router.post('/:id/vote', async (req, res) => {
   if (!onRoster) return res.status(400).json({ error: 'name is not on the crew' });
 
   const existing = plan.votes.findIndex(v => v.name === name);
-  const record = { name, availability: availability.trim(), at: Date.now() };
+  const record = { name, availability, at: Date.now() };
   if (existing >= 0) plan.votes[existing] = record;
   else plan.votes.push(record);
 
-  await putPlan(plan.id, plan, 60 * 60 * 24 * 30);
+  await putPlan(plan.id, plan, TTL_SECONDS);
   res.json({ ok: true });
 });
 
