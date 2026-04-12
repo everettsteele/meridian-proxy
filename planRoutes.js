@@ -48,4 +48,24 @@ router.get('/:id', async (req, res) => {
   res.json(stripPhones(plan));
 });
 
+router.post('/:id/vote', async (req, res) => {
+  const { name, availability } = req.body || {};
+  if (!name || !availability) return res.status(400).json({ error: 'name and availability required' });
+
+  const plan = await getPlan(req.params.id);
+  if (!plan) return res.status(404).json({ error: 'plan not found' });
+  if (plan.locked) return res.status(409).json({ error: 'plan is locked' });
+
+  const onRoster = plan.crew.some(p => p.name === name);
+  if (!onRoster) return res.status(400).json({ error: 'name is not on the crew' });
+
+  const existing = plan.votes.findIndex(v => v.name === name);
+  const record = { name, availability: availability.trim(), at: Date.now() };
+  if (existing >= 0) plan.votes[existing] = record;
+  else plan.votes.push(record);
+
+  await putPlan(plan.id, plan, 60 * 60 * 24 * 30);
+  res.json({ ok: true });
+});
+
 module.exports = router;

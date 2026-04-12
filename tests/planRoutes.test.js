@@ -105,3 +105,73 @@ test('GET /api/plan/:id returns 404 when not found', async () => {
     assert.equal(r.status, 404);
   } finally { server.close(); }
 });
+
+test('POST /api/plan/:id/vote inserts a new voter', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }, { name: 'Dave', phone: '+2' }],
+    crewName: 'x', city: 'x', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'x' },
+    votes: [{ name: 'Mark', availability: 'any Sat', at: 1 }],
+    locked: false, finalDate: null, finalReason: null, finalPlan: null
+  });
+  const { server, port } = await startApp();
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/vote', { name: 'Dave', availability: '4/18 works' });
+    assert.equal(r.status, 200);
+    const stored = store.get('abc');
+    assert.equal(stored.votes.length, 2);
+    assert.equal(stored.votes[1].name, 'Dave');
+    assert.equal(stored.votes[1].availability, '4/18 works');
+  } finally { server.close(); }
+});
+
+test('POST /api/plan/:id/vote updates an existing voter (upsert by name)', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }],
+    crewName: 'x', city: 'x', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'x' },
+    votes: [{ name: 'Mark', availability: 'any Sat', at: 1 }],
+    locked: false, finalDate: null, finalReason: null, finalPlan: null
+  });
+  const { server, port } = await startApp();
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/vote', { name: 'Mark', availability: 'actually, Sundays work too' });
+    assert.equal(r.status, 200);
+    const stored = store.get('abc');
+    assert.equal(stored.votes.length, 1);
+    assert.equal(stored.votes[0].availability, 'actually, Sundays work too');
+  } finally { server.close(); }
+});
+
+test('POST /api/plan/:id/vote rejects voter name not on crew roster', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }],
+    crewName: 'x', city: 'x', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'x' }, votes: [], locked: false,
+    finalDate: null, finalReason: null, finalPlan: null
+  });
+  const { server, port } = await startApp();
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/vote', { name: 'Stranger', availability: 'x' });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /not on the crew/i);
+  } finally { server.close(); }
+});
+
+test('POST /api/plan/:id/vote returns 409 when plan is locked', async () => {
+  store.clear();
+  store.set('abc', {
+    id: 'abc', crew: [{ name: 'Mark', phone: '+1' }],
+    crewName: 'x', city: 'x', driveDistance: 2, vibe: { adventure: 3, risk: 2, cost: 2 },
+    activity: { name: 'x' }, votes: [], locked: true,
+    finalDate: '2026-04-18', finalReason: 'x', finalPlan: []
+  });
+  const { server, port } = await startApp();
+  try {
+    const r = await request(port, 'POST', '/api/plan/abc/vote', { name: 'Mark', availability: 'x' });
+    assert.equal(r.status, 409);
+  } finally { server.close(); }
+});
